@@ -6,37 +6,65 @@
 #include <atomic>
 #include <mutex>
 
-#include "AccountManager.h"
-#include "UserManager.h"
+class SpinLock {
+public:
+	void lock() {
+		//한번에 동작하게끔 유도해주어야 함
+		//CAS (Compare-And-Swap)
 
-void Func1() {
-	for (int32 i = 0; i < 1'000; i++) {
-		UserManager::Instance()->ProcessSave();
+		bool expected = false;
+		bool desired = true;
+
+		//CAS 의사 코드
+		/*if (_locked == expected) {
+			expected = _locked;	//expected가 _locked로 변경되는 것에 주의
+			_locked = desired;
+			return true;
+		}
+		else 
+		{
+			return flase;
+		}*/
+
+		while (_locked.compare_exchange_strong(expected, desired) == false) {
+			expected = false;
+		}
+
+		/*while (_locked) {
+		}
+		_locked = true;*/
 	}
-}
+	void unlock() {
+		//_locked = false;
+		_locked.store(false);
+	}
+private:
+	atomic<bool> _locked = false;
+};
 
-void Func2() {
-	for (int32 i = 0; i < 1'000; i++) {
-		AccountManager::Instance()->ProcessLogin();
+int32 sum = 0;
+mutex m;
+SpinLock spinLock;
+
+void Add() {
+	for (int32 i = 0; i < 100'000;i++) {
+		lock_guard<SpinLock> guard(spinLock);
+		sum++;
+	}
+}void Sub() {
+	for (int32 i = 0; i < 100'000;i++) {
+		lock_guard<SpinLock> guard(spinLock);
+		sum--;
 	}
 }
 
 int main()
 {
-	std::thread t1(Func1);
-	std::thread t2(Func2);
+	thread t1(Add);
+	thread t2(Sub);
 
 	t1.join();
 	t2.join();
 
-	cout << "jobs done" << '\n';
-
-	//참고
-	mutex m1;
-	mutex m2;
-
-	std::lock(m1, m2);
-
-	//adopt_lock: 이미 lock된 상태니까, 나중에 소멸될 때 풀어주기만 해라
-	lock_guard<mutex> g1(m1, std::adopt_lock);
+	cout << sum << '\n';
 }

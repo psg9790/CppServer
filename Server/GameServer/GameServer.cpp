@@ -27,15 +27,13 @@ public:
 		}*/
 
 		while (_locked.compare_exchange_strong(expected, desired) == false) {
-			expected = false;
-		}
+			expected = false;	//CPU 점유율 증가
 
-		/*while (_locked) {
+			this_thread::sleep_for(std::chrono::milliseconds(100));	//sleep, user모드와 kernel모드를 왕복하기 때문에 성능소모, 100ms 동안 스케줄링에 포함되지 않음
+			//this_thread::yield();	//언제든지 다시 스케줄링이 될 수 있지만, 현재는 1차적으로 반환해줌
 		}
-		_locked = true;*/
 	}
 	void unlock() {
-		//_locked = false;
 		_locked.store(false);
 	}
 private:

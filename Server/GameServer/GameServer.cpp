@@ -11,12 +11,23 @@ mutex m;
 queue<int32> q;
 HANDLE handle;
 
+//참고) CV는 User-Level Object (커널 오브젝트 X)
+condition_variable cv;
+
 void Producer() {
 	while (true) {
-		unique_lock<mutex> lock(m);
-		q.push(100);
+		//1) Lock을 잡고
+		//2) 공유 변수 값을 수정
+		//3) Lock을 풀고,
+		//4) 조건변수(condition_variable) 통해 다른 쓰레드에게 통지
 
-		::SetEvent(handle); // Signal = true
+		{
+			unique_lock<mutex> lock(m);
+			q.push(100);
+		}
+		// 여기 나오면 lock 파괴되는듯?
+		
+		cv.notify_one(); //wait중인 쓰레드 중에서 딱 1개를 깨운다
 
 		this_thread::sleep_for(100ms);
 	}
@@ -24,36 +35,29 @@ void Producer() {
 
 void Consumer() {
 	while (true) {
-		::WaitForSingleObject(handle, INFINITE);	//handle의 Signal 대기
-		//Non-Signal일 때 자동으로 Signal 초기화가 안되고 수동으로 해줘야함
-		//::ResetEvent(handle);
-
 		unique_lock<mutex> lock(m);
-		if (q.empty() == false) {
+		cv.wait(lock, []() {return q.empty() == false;});	//내부적으로 조건을 충족하지 않으면 일시적으로 unlock 한 뒤, notify를 대기함: 
+		// notify 수신 시 lock을 다시 걸고 조건을 확인하는 절차를 밟을 것으로 예상
+
+		//1) Lock을 잡고
+		//2) 조건 확인
+		//-만족0 => 빠져 나와서 이어서 코드를 진행
+		//-만족x => Lock을 풀어주고 대기 상태 (풀어줘야 하기 때문에 unique_lock 사용)
+
+		//while (q.empty() == false) 
+		{
 			int32 data = q.front();
 			q.pop();
-			cout << data << '\n';
+			cout << q.size() << '\n';
 		}
-		else {
-			cout << "none" << '\n';
-		}
-		
 	}
 }
 
 int main()
 {
-	//커널 오브젝트 - 유저~커널모드의 개입이 있기 때문에 사용성은 좋음, 하지만 추가적인 비용이 필요함
-	//Usage Count
-	//Signal / Non-Signal <<- bool
-	//Auto / Manual <<- bool
-	handle = ::CreateEvent(NULL/*보안속성*/, FALSE/*ManualReset*/, FALSE/*InitailState*/, NULL);
-
 	thread t1(Producer);
 	thread t2(Consumer);
 
 	t1.join();
 	t2.join();
-
-	::CloseHandle(handle);
 }

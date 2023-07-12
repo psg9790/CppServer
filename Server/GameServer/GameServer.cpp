@@ -8,43 +8,31 @@
 #include <Windows.h>
 #include <future>
 
-atomic<bool> flag;
+thread_local int32 LThreadId = 0;	//기존의 값이 날아가지 않음, 쓰레드마다 자신만의 공간이 따로따로 생김
+
+void ThreadMain(int32 threadId)
+{
+	LThreadId = threadId;
+
+	while (true)
+	{
+		cout << "Hi! I am Thread " << LThreadId << '\n';
+		this_thread::sleep_for(1s);
+	}
+}
 
 int main()
 {
-	flag = false;
+	vector<thread> threads;
 
-	//cout << flag.is_lock_free() << '\n';	//애초에 원자적으로 처리가 된다면 true를 반환함 (Lock이 필요함)
-
-	flag.store(true, memory_order::memory_order_seq_cst);
-
-	bool val = flag.load();
-
-	//이전 flag 값을 prev에 넣고, flag 값을 수정
+	for (int32 i = 0; i < 10; i++)
 	{
-		bool prev = flag.exchange(true);
-		/*bool prev = flag;
-		flag = true;*/
+		int32 threadId = i + 1;
+		threads.push_back(thread(ThreadMain, threadId));
 	}
 
-	//CAS (Compare-And-Swap)
+	for (thread& t : threads)
 	{
-		bool expected = false;
-		bool desired = true;
-		flag.compare_exchange_strong(expected, desired);
-
-		/*if (flag == expected)
-		{
-			//in _weak: 다른 쓰레드의 interruption을 받아서 중간에 실패할 수 있음
-			flag = desired;
-			return true;
-		}
-		else
-		{
-			expected = flag;
-			return false;
-		}*/
-
-		flag.compare_exchange_weak(expected, desired);
+		t.join();
 	}
 }

@@ -8,55 +8,43 @@
 #include <Windows.h>
 #include <future>
 
-//가시성, 코드 재배치
-//가시성: 각 코어마다 다른 캐시를 사용하기 때문에 발생
-//코드 재배치: 컴파일러나 CPU의 자체 판단에 따라 코드 순서가 뒤바뀔 수도 있음
-int32 x = 0;
-int32 y = 0;
-int32 r1 = 0;
-int32 r2 = 0;
-
-volatile bool ready;
-
-void thread_1()
-{
-	while (!ready) {
-
-	}
-	//r1 = x;
-	y = 1;
-	r1 = x;
-}
-
-void thread_2()
-{
-	while (!ready) {
-
-	}
-	//r2 = y;
-	x = 1;
-	r2 = y;
-}
+atomic<bool> flag;
 
 int main()
 {
-	int32 count = 0;
-	while (true)
+	flag = false;
+
+	//cout << flag.is_lock_free() << '\n';	//애초에 원자적으로 처리가 된다면 true를 반환함 (Lock이 필요함)
+
+	flag.store(true, memory_order::memory_order_seq_cst);
+
+	bool val = flag.load();
+
+	//이전 flag 값을 prev에 넣고, flag 값을 수정
 	{
-		ready = false;
-		count++;
-		x = y = r1 = r2 = 0;
-		thread t1(thread_1);
-		thread t2(thread_2);
-
-		ready = true;
-
-		t1.join();
-		t2.join();
-
-		if (r1 == 0 && r2 == 0) {
-			break;
-		}
+		bool prev = flag.exchange(true);
+		/*bool prev = flag;
+		flag = true;*/
 	}
-	cout << count << "번만에 빠져나옴" << '\n';
+
+	//CAS (Compare-And-Swap)
+	{
+		bool expected = false;
+		bool desired = true;
+		flag.compare_exchange_strong(expected, desired);
+
+		/*if (flag == expected)
+		{
+			//in _weak: 다른 쓰레드의 interruption을 받아서 중간에 실패할 수 있음
+			flag = desired;
+			return true;
+		}
+		else
+		{
+			expected = flag;
+			return false;
+		}*/
+
+		flag.compare_exchange_weak(expected, desired);
+	}
 }

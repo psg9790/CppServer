@@ -49,7 +49,7 @@ class LockFreeStack
 {
 	struct Node
 	{
-		Node(const T& value) : data(value)
+		Node(const T& value) : data(value), next(nullptr)
 		{
 
 		}
@@ -59,8 +59,6 @@ class LockFreeStack
 	};
 
 public:
-	//[][][][][][][]
-	//[head]
 	void Push(const T& value)
 	{
 		//1) 새 노드를 만들고
@@ -70,26 +68,10 @@ public:
 		Node* node = new Node(value);
 		node->next = _head;
 
-		/*if (_head == node->next)
-		{
-			_head = node;
-			return true;
-		}
-		else
-		{
-			node->next = _head;
-			return false;
-		}*/
-
-		//CAS
 		while (_head.compare_exchange_weak(node->next, node) == false)
 		{
-			//다시 시도
-			// node->next = _head;
 		}
 
-		//이 사이에 새치기 당할 수 있음
-		//_head = node;
 	}
 
 	bool TryPop(T& value)
@@ -100,27 +82,97 @@ public:
 		//4) data 추출해서 반환
 		//5) 추출한 노드를 삭제
 
+		++_popCount;
 		Node* oldHead = _head;
 		
 		while (oldHead && _head.compare_exchange_weak(oldHead, oldHead->next) == false)
 		{
-			//다시 시도
-			//oldHead = _head;
 		}
 
 		if (oldHead == nullptr)
+		{
+			--_popCount;
 			return false;
+		}
 
-		//Exception 고려 X
 		value = oldHead->data;
-		
-		//잠시 삭제 보류
-		//delete oldHead;
-		//C#, JAVA 같이 GC가 있으면 사실 여기서 끝
+		TryDelete(oldHead);
 
 		return true;
 	}
 
+	//1) 데이터 분리
+	//2) Count 체크
+	//3) 나 혼자면 삭제
+	void TryDelete(Node* oldHead)
+	{
+		//나 외에 누가 있는지
+		if (_popCount == 1)
+		{
+			//나 혼자네?
+
+			//이왕 혼자인거, 삭제 예약된 다른 데이터들도 삭제해보자
+			Node* node = _pendingList.exchange(nullptr);
+			
+			if (--_popCount == 0)
+			{
+				//끼어든 애가 없다는 뜻 -> 삭제 진행
+				//이제와서 누군가 끼어들어도, 어차피 데이터는 분리해둔 상태?
+				DeleteNodes(node);
+			}
+			else if(node)
+			{
+				//누가 끼어들었으니 다시 갖다 놓자
+				ChainPendingNodeList(node);
+			}
+			
+			//내 데이터는 삭제
+			delete oldHead;
+		}
+		else
+		{
+			//누가 있다. 그럼 지금 삭제하지 않고, 삭제 예약만
+			ChainPendingNodeList(oldHead);
+			--_popCount;
+		}
+	}
+
+	void ChainPendingNodeList(Node* first, Node* last)
+	{
+		last->next = _pendingList;
+
+		while (_pendingList.compare_exchange_weak(last->next, first) == false)
+		{
+		}
+	}
+
+	void ChainPendingNodeList(Node* node)
+	{
+		Node* last = node;
+		while (last->next)
+			last = last->next;
+
+		ChainPendingNodeList(node, last);
+	}
+
+	void ChainPendingNode(Node* node)
+	{
+		ChainPendingNodeList(node, node);
+	}
+
+	static void DeleteNodes(Node* node)
+	{
+		while (node)
+		{
+			Node* next = node->next;
+			delete node;
+			node = next;
+		}
+	}
+
 private:
 	atomic<Node*> _head;
+
+	atomic<uint32> _popCount = 0;	//Pop을 실행중인 쓰레드 개수
+	atomic<Node*> _pendingList;	// 삭제 되어야 할 노드들 (첫번째 노드)
 };

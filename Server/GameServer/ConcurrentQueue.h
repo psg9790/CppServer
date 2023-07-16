@@ -192,7 +192,7 @@ public:
 		dummy.ptr = new Node;
 		dummy.externalCount = 1;
 
-		CountedNodePtr oldTail = _tail.load();	//ptr = nullptr
+		CountedNodePtr oldTail = _tail.load();	//data = nullptr
 
 		while (true)
 		{

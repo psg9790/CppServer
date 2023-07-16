@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "CorePch.h"
+#include "ThreadManager.h"
 
 #include <iostream>
 #include <thread>
@@ -8,43 +9,21 @@
 #include <Windows.h>
 #include <future>
 
-#include "ConcurrentQueue.h"
-#include "ConcurrentStack.h"
+CoreGlobal Core;
 
-LockFreeQueue<int32> q;
-LockFreeStack<int32> s;
-
-void Push()
+void ThreadMain()
 {
 	while (true)
 	{
-		int32 value = rand() % 100;
-		q.Push(value);
-
-		this_thread::sleep_for(10ms);
+		cout << "Hello I am thread... " << LThreadId << '\n';
+		this_thread::sleep_for(1s);
 	}
 }
-
-void Pop()
-{
-	while (true)
-	{
-		auto data = q.TryPop();
-		if(data != nullptr)
-		{
-			cout << (*data) << '\n';
-		}
-	}
-}
-
 int main()
 {
-
-	thread t1(Push);
-	thread t2(Pop);
-	thread t3(Pop);
-
-	t1.join();
-	t2.join();
-	t3.join();
+	for (int i = 0; i < 5; i++)
+	{
+		GThreadManager->Launch(ThreadMain);
+	}
+	GThreadManager->Join();
 }

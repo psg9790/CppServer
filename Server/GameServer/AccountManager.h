@@ -1,10 +1,10 @@
 #pragma once
 #include <mutex>
 
+/*
 class Account {
 
 };
-
 class AccountManager
 {
 public:
@@ -23,4 +23,14 @@ private:
 	mutex _mutex;
 	map<int32, Account*> _accounts;
 };
+*/
+class AccountManager
+{
+	USE_LOCK;
+public:
+	void AccountThenManager();
+	void Lock();
+};
+
+extern AccountManager GAccountManager;
 
